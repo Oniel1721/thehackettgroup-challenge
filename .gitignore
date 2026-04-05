@@ -56,8 +56,8 @@ pids
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 # Next.js
-/.next/
-/out/
+.next/
+out/
 next-env.d.ts
 
 # Vercel
