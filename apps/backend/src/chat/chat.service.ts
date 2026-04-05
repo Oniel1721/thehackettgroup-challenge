@@ -15,25 +15,27 @@ export class ChatService {
     private readonly llmService: LlmService,
   ) {}
 
-  async sendMessage(
+  /**
+   * Yields token chunks from the LLM.
+   * Stores the user turn immediately; the assistant turn is stored only
+   * after the caller has consumed the full stream and calls commitReply().
+   */
+  async *streamMessage(
     sessionId: string,
     message: string,
-  ): Promise<SendMessageResult> {
-    const historyBeforeReply = this.sessionService.getTurns(sessionId);
+  ): AsyncIterable<string> {
+    const history = this.sessionService.getTurns(sessionId);
+    yield* this.llmService.streamReply(history, message);
+  }
 
-    // Store user turn first
-    const userTurn: Turn = {
-      role: 'user',
-      content: message,
-      timestamp: Date.now(),
-    };
+  /**
+   * Persists both the user message and the completed assistant reply.
+   * Must be called after the stream has been fully consumed without errors.
+   */
+  commitReply(sessionId: string, userMessage: string, reply: string): number {
+    const now = Date.now();
+    const userTurn: Turn = { role: 'user', content: userMessage, timestamp: now };
     this.sessionService.addTurn(sessionId, userTurn);
-
-    // Call Gemini with the history prior to this message
-    const reply = await this.llmService.generateReply(
-      historyBeforeReply,
-      message,
-    );
 
     const assistantTurn: Turn = {
       role: 'assistant',
@@ -43,9 +45,7 @@ export class ChatService {
     this.sessionService.addTurn(sessionId, assistantTurn);
 
     const turns = this.sessionService.getTurns(sessionId);
-    const turnIndex = Math.floor(turns.length / 2) - 1;
-
-    return { reply, turnIndex };
+    return Math.floor(turns.length / 2) - 1;
   }
 
   getHistory(sessionId: string): { turns: Turn[] } {

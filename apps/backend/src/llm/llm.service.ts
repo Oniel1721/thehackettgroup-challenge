@@ -26,11 +26,15 @@ export class LlmService {
 
   constructor(private readonly config: ConfigService) {
     const apiKey = this.config.getOrThrow<string>('ANTHROPIC_API_KEY');
-    this.model = this.config.get<string>('ANTHROPIC_MODEL') ?? 'claude-haiku-4-5-20251001';
+    this.model =
+      this.config.get<string>('ANTHROPIC_MODEL') ?? 'claude-haiku-4-5-20251001';
     this.client = new Anthropic({ apiKey });
   }
 
-  async generateReply(history: Turn[], newMessage: string): Promise<string> {
+  async *streamReply(
+    history: Turn[],
+    newMessage: string,
+  ): AsyncIterable<string> {
     const messages: Anthropic.MessageParam[] = [
       ...history.map((turn) => ({
         role: turn.role as 'user' | 'assistant',
@@ -40,20 +44,23 @@ export class LlmService {
     ];
 
     try {
-      const response = await this.client.messages.create({
+      const stream = this.client.messages.stream({
         model: this.model,
         max_tokens: 1024,
         system: SYSTEM_PROMPT,
         messages,
       });
 
-      const block = response.content[0];
-      if (!block || block.type !== 'text') {
-        throw new Error('Empty response from Anthropic');
+      for await (const event of stream) {
+        if (
+          event.type === 'content_block_delta' &&
+          event.delta.type === 'text_delta'
+        ) {
+          yield event.delta.text;
+        }
       }
-      return block.text;
     } catch (err) {
-      this.logger.error('Anthropic API error', err);
+      this.logger.error('Anthropic streaming error', err);
       throw new InternalServerErrorException('LLM unavailable');
     }
   }

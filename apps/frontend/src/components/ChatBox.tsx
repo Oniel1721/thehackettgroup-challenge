@@ -1,13 +1,7 @@
 "use client";
 
-import {
-  useOptimistic,
-  useRef,
-  useState,
-  useTransition,
-  useEffect,
-} from "react";
-import { Message, SendMessageResponse } from "@/types/chat";
+import { useOptimistic, useRef, useState, useTransition, useEffect } from "react";
+import { Message } from "@/types/chat";
 
 interface ChatBoxProps {
   sessionId: string;
@@ -33,6 +27,7 @@ export function ChatBox({ sessionId, initialMessages }: ChatBoxProps) {
     messages,
     (_state: Message[], draft: Message[]) => draft,
   );
+  const [streamingContent, setStreamingContent] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [error, setError] = useState<ErrorBanner>(null);
   const [turnCount, setTurnCount] = useState(
@@ -43,7 +38,7 @@ export function ChatBox({ sessionId, initialMessages }: ChatBoxProps) {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [optimisticMessages]);
+  }, [optimisticMessages, streamingContent]);
 
   async function handleSend() {
     const message = input.trim();
@@ -64,8 +59,8 @@ export function ChatBox({ sessionId, initialMessages }: ChatBoxProps) {
     };
 
     startTransition(async () => {
-      // Show optimistic user bubble immediately
       addOptimistic([...messages, optimisticUser]);
+      setStreamingContent("");
 
       try {
         const res = await fetch("/api/chat", {
@@ -74,44 +69,82 @@ export function ChatBox({ sessionId, initialMessages }: ChatBoxProps) {
           body: JSON.stringify({ message }),
         });
 
-        if (res.status === 400) {
-          setError("empty");
-          // messages unchanged → optimistic bubble rolls back automatically
+        // Non-streaming error responses
+        if (!res.ok || res.headers.get("content-type")?.includes("application/json")) {
+          const data = await res.json();
+          if (data.sessionExpired) {
+            setError("expired");
+          } else {
+            setError("network");
+          }
+          setStreamingContent(null);
           return;
         }
 
-        if (res.status === 404 || res.status === 410) {
-          setError("expired");
-          return;
+        const reader = res.body!.getReader();
+        const decoder = new TextDecoder();
+        let accumulated = "";
+        let finalTurnIndex = 0;
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          // Keep the last incomplete line in the buffer
+          buffer = lines.pop() ?? "";
+
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            const raw = line.slice(6).trim();
+            if (!raw) continue;
+
+            let parsed: Record<string, unknown>;
+            try {
+              parsed = JSON.parse(raw);
+            } catch {
+              continue;
+            }
+
+            if (typeof parsed.token === "string") {
+              accumulated += parsed.token;
+              setStreamingContent(accumulated);
+            } else if (parsed.done === true) {
+              finalTurnIndex = (parsed.turnIndex as number) ?? 0;
+            } else if (parsed.sessionExpired) {
+              setError("expired");
+              setStreamingContent(null);
+              return;
+            } else if (parsed.error) {
+              setError("network");
+              setStreamingContent(null);
+              return;
+            }
+          }
         }
 
-        if (!res.ok) {
-          setError("network");
-          return;
-        }
-
-        const data = (await res.json()) as SendMessageResponse;
-        const ts = Date.now();
-
+        // Commit both messages to real state
         const userMsg: Message = {
-          id: `user-${ts}`,
+          id: `user-${now}`,
           role: "user",
           content: message,
           timestamp: now,
         };
         const botMsg: Message = {
-          id: `bot-${ts}`,
+          id: `bot-${Date.now()}`,
           role: "assistant",
-          content: data.reply,
-          timestamp: ts,
+          content: accumulated,
+          timestamp: Date.now(),
         };
 
-        // Commit both messages — optimistic bubble is replaced cleanly
         setMessages((prev) => [...prev, userMsg, botMsg]);
-        setTurnCount(data.turnIndex + 1);
+        setTurnCount(finalTurnIndex + 1);
       } catch {
         setError("network");
-        // optimistic bubble rolls back since setMessages was not called
+      } finally {
+        setStreamingContent(null);
       }
     });
   }
@@ -126,7 +159,7 @@ export function ChatBox({ sessionId, initialMessages }: ChatBoxProps) {
   }
 
   return (
-    <div className="flex h-screen flex-col bg-gradient-to-br from-slate-50 to-slate-100">
+    <div className="flex h-screen flex-col bg-linear-to-br from-slate-50 to-slate-100">
       {/* ── Header ── */}
       <header className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6 py-4 shadow-sm">
         <div className="flex items-center gap-3">
@@ -137,12 +170,9 @@ export function ChatBox({ sessionId, initialMessages }: ChatBoxProps) {
             <h1 className="text-sm font-semibold text-slate-900">
               Chef Assistant
             </h1>
-            <p className="text-xs text-slate-500">
-              Your personal cooking expert
-            </p>
+            <p className="text-xs text-slate-500">Your personal cooking expert</p>
           </div>
         </div>
-
         <div className="flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1.5 text-xs text-slate-600">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
           {turnCount} turn{turnCount !== 1 ? "s" : ""}
@@ -170,7 +200,7 @@ export function ChatBox({ sessionId, initialMessages }: ChatBoxProps) {
       {/* ── Message list ── */}
       <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-6">
         <div className="mx-auto max-w-2xl space-y-4">
-          {optimisticMessages.length === 0 && (
+          {optimisticMessages.length === 0 && streamingContent === null && (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-100 text-3xl">
                 🍳
@@ -191,7 +221,6 @@ export function ChatBox({ sessionId, initialMessages }: ChatBoxProps) {
                 key={msg.id}
                 className={`flex items-end gap-2 ${isUser ? "flex-row-reverse" : "flex-row"}`}
               >
-                {/* Avatar */}
                 <span
                   className={`flex h-7 w-7 shrink-0 select-none items-center justify-center rounded-full text-xs font-semibold ${
                     isUser
@@ -201,7 +230,6 @@ export function ChatBox({ sessionId, initialMessages }: ChatBoxProps) {
                 >
                   {isUser ? "U" : "AI"}
                 </span>
-
                 <div
                   className={`flex max-w-[75%] flex-col gap-1 ${isUser ? "items-end" : "items-start"}`}
                 >
@@ -222,6 +250,29 @@ export function ChatBox({ sessionId, initialMessages }: ChatBoxProps) {
             );
           })}
 
+          {/* ── Streaming bot bubble ── */}
+          {streamingContent !== null && (
+            <div className="flex items-end gap-2 flex-row">
+              <span className="flex h-7 w-7 shrink-0 select-none items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700">
+                AI
+              </span>
+              <div className="flex max-w-[75%] flex-col gap-1 items-start">
+                <div className="rounded-2xl rounded-tl-sm bg-white px-4 py-2.5 text-sm leading-relaxed text-slate-800 shadow-sm ring-1 ring-slate-200">
+                  {streamingContent || (
+                    <span className="inline-flex gap-1">
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400 [animation-delay:0ms]" />
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400 [animation-delay:150ms]" />
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400 [animation-delay:300ms]" />
+                    </span>
+                  )}
+                  {streamingContent && (
+                    <span className="cursor-blink" />
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           <div ref={bottomRef} />
         </div>
       </div>
@@ -230,11 +281,8 @@ export function ChatBox({ sessionId, initialMessages }: ChatBoxProps) {
       <div className="shrink-0 border-t border-slate-200 bg-white px-4 py-4 sm:px-6">
         <div className="mx-auto max-w-2xl">
           {error === "empty" && (
-            <p className="mb-2 text-xs text-red-500">
-              Message cannot be empty.
-            </p>
+            <p className="mb-2 text-xs text-red-500">Message cannot be empty.</p>
           )}
-
           <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 shadow-sm transition-all focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100">
             <input
               type="text"
@@ -248,7 +296,6 @@ export function ChatBox({ sessionId, initialMessages }: ChatBoxProps) {
               disabled={isPending}
               className="flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400 disabled:opacity-50"
             />
-
             <button
               onClick={handleSend}
               disabled={isPending || !input.trim()}
@@ -256,37 +303,17 @@ export function ChatBox({ sessionId, initialMessages }: ChatBoxProps) {
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white transition-all hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {isPending ? (
-                <svg
-                  className="h-4 w-4 animate-spin"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8v8H4z"
-                  />
+                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                 </svg>
               ) : (
-                <svg
-                  className="h-4 w-4"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                >
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
                 </svg>
               )}
             </button>
           </div>
-
           <p className="mt-2 text-center text-[10px] text-slate-400">
             Press Enter or click Send · Session:{" "}
             <span className="font-mono">{sessionId.slice(0, 8)}…</span>
