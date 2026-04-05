@@ -12,18 +12,34 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
+  console.log({ body})
+  let nestRes: globalThis.Response;
+  try {
+    nestRes = await fetch(`${API_URL}/chat/${sessionId}/message`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      cache: "no-store",
+    });
+  } catch {
+    return Response.json({ error: "LLM unavailable" }, { status: 502 });
+  }
+  console.log("NestJS response status:", nestRes.status);
+  if (nestRes.status === 404 || nestRes.status === 410) {
+    return Response.json({ sessionExpired: true }, { status: nestRes.status });
+  }
+  console.log("NestJS response:", nestRes.ok, nestRes.body);
 
-  const res = await fetch(`${API_URL}/chat/${sessionId}/message`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-    cache: "no-store",
-  });
-
-  if (res.status === 404 || res.status === 410) {
-    return Response.json({ sessionExpired: true }, { status: res.status });
+  if (!nestRes.ok || !nestRes.body) {
+    return Response.json({ error: "LLM unavailable" }, { status: 502 });
   }
 
-  const data = await res.json();
-  return Response.json(data, { status: res.status });
+  // Pipe the NestJS SSE stream directly to the browser
+  return new Response(nestRes.body, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+  });
 }

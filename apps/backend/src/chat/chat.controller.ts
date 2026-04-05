@@ -6,8 +6,10 @@ import {
   HttpCode,
   Param,
   Post,
+  Res,
 } from '@nestjs/common';
-import { ChatService, type SendMessageResult } from './chat.service';
+import type { Response } from 'express';
+import { ChatService } from './chat.service';
 import { CreateMessageDto } from './dto/create-message.dto';
 import { Turn } from '../common/types/chat.types';
 import { SessionService } from '../session/session.service';
@@ -27,11 +29,35 @@ export class ChatController {
   }
 
   @Post(':sessionId/message')
-  sendMessage(
+  async sendMessage(
     @Param('sessionId') sessionId: string,
     @Body() dto: CreateMessageDto,
-  ): SendMessageResult {
-    return this.chatService.sendMessage(sessionId, dto.message);
+    @Res() res: Response,
+  ): Promise<void> {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    let fullReply = '';
+
+    try {
+      for await (const token of this.chatService.streamMessage(
+        sessionId,
+        dto.message,
+      )) {
+        fullReply += token;
+        res.write(`data: ${JSON.stringify({ token })}\n\n`);
+      }
+
+      // Store the assistant reply only after the stream is complete
+      const turnIndex = this.chatService.commitReply(sessionId, dto.message, fullReply);
+      res.write(`data: ${JSON.stringify({ done: true, turnIndex })}\n\n`);
+    } catch {
+      res.write(`data: ${JSON.stringify({ error: 'LLM unavailable' })}\n\n`);
+    }
+
+    res.end();
   }
 
   @Get(':sessionId/history')
