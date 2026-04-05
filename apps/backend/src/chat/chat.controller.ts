@@ -27,10 +27,10 @@ export class ChatController {
   }
 
   @Post(':sessionId/message')
-  sendMessage(
+  async sendMessage(
     @Param('sessionId') sessionId: string,
     @Body() dto: CreateMessageDto,
-  ): SendMessageResult {
+  ): Promise<SendMessageResult> {
     return this.chatService.sendMessage(sessionId, dto.message);
   }
 

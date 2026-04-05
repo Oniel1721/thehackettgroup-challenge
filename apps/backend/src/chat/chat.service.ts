@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { SessionService } from '../session/session.service';
+import { LlmService } from '../llm/llm.service';
 import { Turn } from '../common/types/chat.types';
 
 export interface SendMessageResult {
@@ -9,10 +10,18 @@ export interface SendMessageResult {
 
 @Injectable()
 export class ChatService {
-  constructor(private readonly sessionService: SessionService) {}
+  constructor(
+    private readonly sessionService: SessionService,
+    private readonly llmService: LlmService,
+  ) {}
 
-  sendMessage(sessionId: string, message: string): SendMessageResult {
-    // Store user turn
+  async sendMessage(
+    sessionId: string,
+    message: string,
+  ): Promise<SendMessageResult> {
+    const historyBeforeReply = this.sessionService.getTurns(sessionId);
+
+    // Store user turn first
     const userTurn: Turn = {
       role: 'user',
       content: message,
@@ -20,8 +29,11 @@ export class ChatService {
     };
     this.sessionService.addTurn(sessionId, userTurn);
 
-    // Stub reply — will be replaced by LlmService in Phase 3
-    const reply = `Echo: ${message}`;
+    // Call Gemini with the history prior to this message
+    const reply = await this.llmService.generateReply(
+      historyBeforeReply,
+      message,
+    );
 
     const assistantTurn: Turn = {
       role: 'assistant',
