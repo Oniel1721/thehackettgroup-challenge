@@ -12,7 +12,6 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  console.log({ body})
   let nestRes: globalThis.Response;
   try {
     nestRes = await fetch(`${API_URL}/chat/${sessionId}/message`, {
@@ -24,11 +23,10 @@ export async function POST(req: NextRequest) {
   } catch {
     return Response.json({ error: "LLM unavailable" }, { status: 502 });
   }
-  console.log("NestJS response status:", nestRes.status);
+
   if (nestRes.status === 404 || nestRes.status === 410) {
     return Response.json({ sessionExpired: true }, { status: nestRes.status });
   }
-  console.log("NestJS response:", nestRes.ok, nestRes.body);
 
   if (!nestRes.ok || !nestRes.body) {
     return Response.json({ error: "LLM unavailable" }, { status: 502 });
