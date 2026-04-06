@@ -8,7 +8,7 @@ interface ChatBoxProps {
   initialMessages: Message[];
 }
 
-type ErrorBanner = "empty" | "expired" | "network" | null;
+type ErrorBanner = "empty" | "expired" | "network" | "ratelimit" | null;
 
 function formatRelativeTime(timestamp: number): string {
   const diff = Date.now() - timestamp;
@@ -71,6 +71,11 @@ export function ChatBox({ sessionId, initialMessages }: ChatBoxProps) {
 
         // Non-streaming error responses
         if (!res.ok || res.headers.get("content-type")?.includes("application/json")) {
+          if (res.status === 429) {
+            setError("ratelimit");
+            setStreamingContent(null);
+            return;
+          }
           const data = await res.json();
           if (data.sessionExpired) {
             setError("expired");
@@ -194,6 +199,11 @@ export function ChatBox({ sessionId, initialMessages }: ChatBoxProps) {
       {error === "network" && (
         <div className="shrink-0 border-b border-red-200 bg-red-50 px-6 py-3 text-sm text-red-700">
           Connection lost, please retry.
+        </div>
+      )}
+      {error === "ratelimit" && (
+        <div className="shrink-0 border-b border-orange-200 bg-orange-50 px-6 py-3 text-sm text-orange-800">
+          Too many messages. You&apos;ve reached the limit of 20 messages per hour. Please try again later.
         </div>
       )}
 
