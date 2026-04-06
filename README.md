@@ -121,6 +121,17 @@ The assistant has access to a `lookup_recipe` tool. When a user asks for a recip
 
 This guarantees tool resolution completes before the first token reaches the UI.
 
+### Edge Runtime
+
+The BFF route (`app/api/chat/route.ts`) runs on the **Edge Runtime** (`export const runtime = 'edge'`).
+
+**What changes:**
+- The route executes in a V8 isolate instead of a full Node.js process — no `fs`, no `Buffer`, no Node-specific APIs
+- Cold starts drop from ~200–500 ms to ~5–50 ms on platforms like Vercel Edge Network
+
+**Why it works here:**
+The BFF only uses Web-standard APIs (`fetch`, `Request`, `Response`, `ReadableStream`, `cookies()` from `next/headers`) — no Node.js APIs are needed. The SSE stream is piped using native `ReadableStream`, which is first-class in the Edge runtime. The result is a lower-latency proxy with no code changes beyond the one-line declaration.
+
 ---
 
 ## Sample Interactions

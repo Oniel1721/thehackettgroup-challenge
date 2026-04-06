@@ -1,6 +1,8 @@
 import { cookies } from "next/headers";
 import { NextRequest } from "next/server";
 
+export const runtime = "edge";
+
 const API_URL = process.env.API_URL ?? "http://localhost:3001";
 
 const RATE_LIMIT = 20;          // max requests
