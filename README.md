@@ -19,13 +19,16 @@ A multi-turn cooking assistant chat app built with **NestJS** (backend) and **Ne
 
 ```bash
 cp .env.example .env
-# Fill in LLM_API_KEY in .env
+# Fill in ANTHROPIC_API_KEY in .env
 
 docker compose up --build
 ```
 
 - Frontend: http://localhost:3000
 - Backend: http://localhost:3001
+- Redis: localhost:6379
+
+Docker Compose starts Redis automatically and configures NestJS to use it as the session store (`SESSION_STORE=redis`).
 
 ---
 
@@ -35,10 +38,12 @@ docker compose up --build
 
 ```bash
 cd apps/backend
-cp ../../.env.example .env   # set LLM_API_KEY
+cp ../../.env.example .env   # set ANTHROPIC_API_KEY
 npm install
 npm run start:dev
 ```
+
+By default the backend uses the **in-memory** session store (`SESSION_STORE=memory`). To use Redis locally, start a Redis instance and set `SESSION_STORE=redis` and `REDIS_URL=redis://localhost:6379` in your `.env`.
 
 ### Frontend
 
@@ -88,11 +93,22 @@ Browser ──fetch /api/chat──▶ Next.js BFF ──fetch NestJS──▶ N
 
 ### Session Lifecycle
 
-Sessions are stored in-memory in NestJS. They expire after **30 minutes of idle time**. When a session expires or is not found:
+Sessions expire after **30 minutes of idle time**. When a session expires or is not found:
 
 - NestJS returns 404 (not found) or 410 (expired)
 - The BFF translates these to `{ sessionExpired: true }`
 - The frontend shows an expiry banner, clears the cookie, and redirects to `/`
+
+### Session Store — Repository Pattern
+
+The session store is abstracted behind an `ISessionRepository` interface with two implementations:
+
+| Implementation | Class | When used |
+|---|---|---|
+| In-memory | `InMemorySessionRepository` | `SESSION_STORE=memory` (default) |
+| Redis | `RedisSessionRepository` | `SESSION_STORE=redis` |
+
+The active implementation is selected at startup via the `SESSION_STORE` environment variable. Docker Compose defaults to Redis. Local development defaults to in-memory (no Redis required).
 
 ### Tool Calling
 
@@ -161,3 +177,5 @@ This guarantees tool resolution completes before the first token reaches the UI.
 | `ANTHROPIC_MODEL` | No | `claude-haiku-4-5-20251001` | Model ID |
 | `PORT` | No | `3001` | NestJS listen port |
 | `API_URL` | No | `http://localhost:3001` | NestJS URL (used by Next.js BFF) |
+| `SESSION_STORE` | No | `memory` | Session backend: `memory` or `redis` |
+| `REDIS_URL` | No | `redis://localhost:6379` | Redis connection URL (only when `SESSION_STORE=redis`) |

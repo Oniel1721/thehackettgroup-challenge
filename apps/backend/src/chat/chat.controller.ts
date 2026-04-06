@@ -23,8 +23,8 @@ export class ChatController {
 
   @Post('session')
   @HttpCode(201)
-  createSession(): { sessionId: string } {
-    const sessionId = this.sessionService.createSession();
+  async createSession(): Promise<{ sessionId: string }> {
+    const sessionId = await this.sessionService.createSession();
     return { sessionId };
   }
 
@@ -50,8 +50,7 @@ export class ChatController {
         res.write(`data: ${JSON.stringify({ token })}\n\n`);
       }
 
-      // Store the assistant reply only after the stream is complete
-      const turnIndex = this.chatService.commitReply(sessionId, dto.message, fullReply);
+      const turnIndex = await this.chatService.commitReply(sessionId, dto.message, fullReply);
       res.write(`data: ${JSON.stringify({ done: true, turnIndex })}\n\n`);
     } catch {
       res.write(`data: ${JSON.stringify({ error: 'LLM unavailable' })}\n\n`);
@@ -61,13 +60,13 @@ export class ChatController {
   }
 
   @Get(':sessionId/history')
-  getHistory(@Param('sessionId') sessionId: string): { turns: Turn[] } {
+  async getHistory(@Param('sessionId') sessionId: string): Promise<{ turns: Turn[] }> {
     return this.chatService.getHistory(sessionId);
   }
 
   @Delete(':sessionId')
   @HttpCode(204)
-  deleteSession(@Param('sessionId') sessionId: string): void {
-    this.sessionService.deleteSession(sessionId);
+  async deleteSession(@Param('sessionId') sessionId: string): Promise<void> {
+    await this.sessionService.deleteSession(sessionId);
   }
 }
