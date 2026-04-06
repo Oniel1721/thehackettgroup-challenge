@@ -43,7 +43,9 @@ function makeSseBody(): ReadableStream {
 describe("/api/chat Route Handler", () => {
   beforeEach(() => {
     jest.resetModules();
-    mockCookiesGet.mockReturnValue({ value: "test-session-id" });
+    mockCookiesGet.mockImplementation((name: string) =>
+      name === "sessionId" ? { value: "test-session-id" } : undefined,
+    );
   });
 
   afterEach(() => {
