@@ -3,7 +3,9 @@ import {
   Controller,
   Delete,
   Get,
+  GoneException,
   HttpCode,
+  NotFoundException,
   Param,
   Post,
   Res,
@@ -52,8 +54,12 @@ export class ChatController {
 
       const turnIndex = await this.chatService.commitReply(sessionId, dto.message, fullReply);
       res.write(`data: ${JSON.stringify({ done: true, turnIndex })}\n\n`);
-    } catch {
-      res.write(`data: ${JSON.stringify({ error: 'LLM unavailable' })}\n\n`);
+    } catch (err) {
+      if (err instanceof NotFoundException || err instanceof GoneException) {
+        res.write(`data: ${JSON.stringify({ sessionExpired: true })}\n\n`);
+      } else {
+        res.write(`data: ${JSON.stringify({ error: 'LLM unavailable' })}\n\n`);
+      }
     }
 
     res.end();
