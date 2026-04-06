@@ -4,8 +4,24 @@ import request from 'supertest';
 import { ChatModule } from './chat.module';
 import { LlmService } from '../llm/llm.service';
 import { CLOCK_TOKEN } from '../common/tokens/clock.token';
+import { SESSION_REPOSITORY } from '../session/session.repository.interface';
+import { REDIS_CLIENT } from '../redis/redis.module';
+import { Session } from '../common/types/chat.types';
 
 const THIRTY_MIN_MS = 30 * 60 * 1000;
+
+function makeRepositoryMock() {
+  const store = new Map<string, Session>();
+  return {
+    save: jest.fn(async (session: Session) => { store.set(session.id, structuredClone(session)); }),
+    findById: jest.fn(async (id: string) => {
+      const s = store.get(id);
+      return s ? structuredClone(s) : null;
+    }),
+    delete: jest.fn(async (id: string) => { const had = store.has(id); store.delete(id); return had; }),
+    exists: jest.fn(async (id: string) => store.has(id)),
+  };
+}
 
 describe('ChatController (integration)', () => {
   let app: INestApplication;
@@ -29,6 +45,10 @@ describe('ChatController (integration)', () => {
       .useValue(llmServiceStub)
       .overrideProvider(CLOCK_TOKEN)
       .useValue(mockClock)
+      .overrideProvider(SESSION_REPOSITORY)
+      .useValue(makeRepositoryMock())
+      .overrideProvider(REDIS_CLIENT)
+      .useValue({})
       .compile();
 
     app = module.createNestApplication();

@@ -15,40 +15,35 @@ export class ChatService {
     private readonly llmService: LlmService,
   ) {}
 
-  /**
-   * Yields token chunks from the LLM.
-   * Stores the user turn immediately; the assistant turn is stored only
-   * after the caller has consumed the full stream and calls commitReply().
-   */
   async *streamMessage(
     sessionId: string,
     message: string,
   ): AsyncIterable<string> {
-    const history = this.sessionService.getTurns(sessionId);
+    const history = await this.sessionService.getTurns(sessionId);
     yield* this.llmService.streamReply(history, message);
   }
 
-  /**
-   * Persists both the user message and the completed assistant reply.
-   * Must be called after the stream has been fully consumed without errors.
-   */
-  commitReply(sessionId: string, userMessage: string, reply: string): number {
+  async commitReply(
+    sessionId: string,
+    userMessage: string,
+    reply: string,
+  ): Promise<number> {
     const now = Date.now();
     const userTurn: Turn = { role: 'user', content: userMessage, timestamp: now };
-    this.sessionService.addTurn(sessionId, userTurn);
+    await this.sessionService.addTurn(sessionId, userTurn);
 
     const assistantTurn: Turn = {
       role: 'assistant',
       content: reply,
       timestamp: Date.now(),
     };
-    this.sessionService.addTurn(sessionId, assistantTurn);
+    await this.sessionService.addTurn(sessionId, assistantTurn);
 
-    const turns = this.sessionService.getTurns(sessionId);
+    const turns = await this.sessionService.getTurns(sessionId);
     return Math.floor(turns.length / 2) - 1;
   }
 
-  getHistory(sessionId: string): { turns: Turn[] } {
-    return { turns: this.sessionService.getTurns(sessionId) };
+  async getHistory(sessionId: string): Promise<{ turns: Turn[] }> {
+    return { turns: await this.sessionService.getTurns(sessionId) };
   }
 }
