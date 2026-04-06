@@ -1,5 +1,6 @@
 import { Message } from "@/types/chat";
 import { formatRelativeTime } from "@/utils/time";
+import { MarkdownContent } from "./MarkdownContent";
 
 interface MessageBubbleProps {
   message: Message;
@@ -31,7 +32,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
               : "rounded-tl-sm bg-white text-slate-800 shadow-sm ring-1 ring-slate-200"
           }`}
         >
-          {message.content}
+          {isUser ? message.content : <MarkdownContent content={message.content} />}
         </div>
         <span className="text-[10px] text-slate-400">
           {formatRelativeTime(message.timestamp)}

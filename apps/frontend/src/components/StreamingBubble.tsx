@@ -1,6 +1,7 @@
 "use client";
 
 import { useChat } from "@/context/ChatContext";
+import { MarkdownContent } from "./MarkdownContent";
 
 export function StreamingBubble() {
   const { streamingContent } = useChat();
@@ -14,14 +15,18 @@ export function StreamingBubble() {
       </span>
       <div className="flex max-w-[75%] flex-col gap-1 items-start">
         <div className="rounded-2xl rounded-tl-sm bg-white px-4 py-2.5 text-sm leading-relaxed text-slate-800 shadow-sm ring-1 ring-slate-200">
-          {streamingContent || (
+          {streamingContent ? (
+            <>
+              <MarkdownContent content={streamingContent} />
+              <span className="cursor-blink" />
+            </>
+          ) : (
             <span className="inline-flex gap-1">
               <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400 [animation-delay:0ms]" />
               <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400 [animation-delay:150ms]" />
               <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400 [animation-delay:300ms]" />
             </span>
           )}
-          {streamingContent && <span className="cursor-blink" />}
         </div>
       </div>
     </div>
