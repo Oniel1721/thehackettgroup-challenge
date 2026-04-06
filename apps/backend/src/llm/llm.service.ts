@@ -147,9 +147,9 @@ export class LlmService {
   private readonly logger = new Logger(LlmService.name);
 
   constructor(private readonly config: ConfigService) {
-    const apiKey = this.config.getOrThrow<string>('ANTHROPIC_API_KEY');
+    const apiKey = this.config.getOrThrow<string>('LLM_API_KEY');
     this.model =
-      this.config.get<string>('ANTHROPIC_MODEL') ?? 'claude-haiku-4-5-20251001';
+      this.config.get<string>('LLM_MODEL') ?? 'claude-haiku-4-5-20251001';
     this.client = new Anthropic({ apiKey });
   }
 

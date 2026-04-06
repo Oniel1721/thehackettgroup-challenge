@@ -19,7 +19,7 @@ A multi-turn cooking assistant chat app built with **NestJS** (backend) and **Ne
 
 ```bash
 cp .env.example .env
-# Fill in ANTHROPIC_API_KEY in .env
+# Fill in LLM_API_KEY in .env
 
 docker compose up --build
 ```
@@ -38,7 +38,7 @@ Docker Compose starts Redis automatically and configures NestJS to use it as the
 
 ```bash
 cd apps/backend
-cp ../../.env.example .env   # set ANTHROPIC_API_KEY
+cp ../../.env.example .env   # set LLM_API_KEY
 npm install
 npm run start:dev
 ```
@@ -173,8 +173,8 @@ This guarantees tool resolution completes before the first token reaches the UI.
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `ANTHROPIC_API_KEY` | Yes | — | Anthropic API key |
-| `ANTHROPIC_MODEL` | No | `claude-haiku-4-5-20251001` | Model ID |
+| `LLM_API_KEY` | Yes | — | Anthropic API key |
+| `LLM_MODEL` | No | `claude-haiku-4-5-20251001` | Model ID |
 | `PORT` | No | `3001` | NestJS listen port |
 | `API_URL` | No | `http://localhost:3001` | NestJS URL (used by Next.js BFF) |
 | `SESSION_STORE` | No | `memory` | Session backend: `memory` or `redis` |
